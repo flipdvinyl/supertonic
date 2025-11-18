@@ -62,13 +62,13 @@ cd supertonic
 
 Before running the examples, download the ONNX models and preset voices, and place them in the `assets` directory:
 
-```bash
-git clone https://huggingface.co/Supertone/supertonic assets
-```
-
 > **Note:** The Hugging Face repository uses Git LFS. Please ensure Git LFS is installed and initialized before cloning or pulling large model files.
 > - macOS: `brew install git-lfs && git lfs install`
 > - Generic: see `https://git-lfs.com` for installers
+
+```bash
+git clone https://huggingface.co/Supertone/supertonic assets
+```
 
 ### Quick Start
 
