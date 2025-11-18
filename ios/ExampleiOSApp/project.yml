@@ -12,6 +12,8 @@ targets:
     deploymentTarget: "15.0"
     sources:
       - path: .
+      - path: ../../swift/Sources/Helper.swift <<- 여기
+        type: file
     resources:
       - path: onnx
         type: folder
