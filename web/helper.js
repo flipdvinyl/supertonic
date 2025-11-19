@@ -312,19 +312,35 @@ export async function loadVoiceStyle(voiceStylePaths, verbose = false) {
  * Load configuration from JSON
  */
 export async function loadCfgs(onnxDir) {
-    const response = await fetch(`${onnxDir}/tts.json`);
+    const url = `${onnxDir}/tts.json`;
+    console.log(`[loadCfgs] Attempting to load: ${url}`);
+    
+    const response = await fetch(url);
+    console.log(`[loadCfgs] Response status: ${response.status} ${response.statusText}`);
+    console.log(`[loadCfgs] Response headers:`, Object.fromEntries(response.headers.entries()));
+    
     if (!response.ok) {
-        throw new Error(`Failed to load config: ${response.status} ${response.statusText} - ${onnxDir}/tts.json`);
+        console.error(`[loadCfgs] Failed to load: ${response.status} ${response.statusText}`);
+        throw new Error(`Failed to load config: ${response.status} ${response.statusText} - ${url}`);
     }
+    
     const text = await response.text();
+    console.log(`[loadCfgs] Response text length: ${text.length} characters`);
+    console.log(`[loadCfgs] Response text preview (first 200 chars):`, text.substring(0, 200));
+    
     if (!text || text.trim().length === 0) {
-        throw new Error(`Config file is empty: ${onnxDir}/tts.json`);
+        console.error(`[loadCfgs] Config file is empty! URL: ${url}`);
+        console.error(`[loadCfgs] Response was:`, response);
+        throw new Error(`Config file is empty: ${url}`);
     }
     try {
         const cfgs = JSON.parse(text);
+        console.log(`[loadCfgs] Successfully parsed JSON, keys:`, Object.keys(cfgs));
         return cfgs;
     } catch (e) {
-        throw new Error(`Failed to parse config JSON: ${onnxDir}/tts.json - ${e.message}`);
+        console.error(`[loadCfgs] Failed to parse JSON:`, e);
+        console.error(`[loadCfgs] Text content:`, text);
+        throw new Error(`Failed to parse config JSON: ${url} - ${e.message}`);
     }
 }
 
