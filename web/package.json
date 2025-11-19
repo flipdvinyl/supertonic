@@ -6,9 +6,10 @@
   "scripts": {
     "prepare": "node prepare-assets.js",
     "dev": "vite",
-    "build": "npm run prepare && vite build && node verify-build.js",
+    "build": "npm run prepare && vite build && node post-build.js && node verify-build.js",
     "preview": "vite preview",
-    "verify": "node verify-build.js"
+    "verify": "node verify-build.js",
+    "postbuild": "node post-build.js"
   },
   "keywords": ["tts", "onnx", "speech-synthesis", "web"],
   "author": "",
