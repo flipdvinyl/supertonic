@@ -122,13 +122,17 @@ async function prepareAssets() {
   const assetsDir = resolve(__dirname, '../assets');
   const publicDir = resolve(__dirname, 'public');
   
+  console.log('🚀 Starting assets preparation...');
+  console.log(`   Assets dir: ${assetsDir}`);
+  console.log(`   Public dir: ${publicDir}`);
+  
   if (!existsSync(assetsDir)) {
     console.warn('⚠️  Assets directory not found.');
     // Try to download automatically
     const downloaded = await downloadAssets(assetsDir);
     if (!downloaded) {
-      console.warn('   Failed to download assets. The build may fail.');
-      return;
+      console.error('❌ Failed to download assets. The build will fail.');
+      process.exit(1);
     }
   } else {
     // Check if assets are valid (not just pointer files)
@@ -153,12 +157,33 @@ async function prepareAssets() {
         rmSync(assetsDir, { recursive: true, force: true });
         const downloaded = await downloadAssets(assetsDir);
         if (!downloaded) {
-          console.warn('   Failed to re-download assets.');
-          return;
+          console.error('❌ Failed to re-download assets. The build will fail.');
+          process.exit(1);
         }
       }
     }
   }
+  
+  // Verify critical files exist before copying
+  const criticalFiles = [
+    join(assetsDir, 'onnx', 'tts.json'),
+    join(assetsDir, 'onnx', 'text_encoder.onnx'),
+    join(assetsDir, 'voice_styles', 'M1.json')
+  ];
+  
+  for (const file of criticalFiles) {
+    if (!existsSync(file)) {
+      console.error(`❌ Critical file missing: ${file}`);
+      process.exit(1);
+    }
+    const stats = statSync(file);
+    if (stats.size === 0) {
+      console.error(`❌ Critical file is empty: ${file}`);
+      process.exit(1);
+    }
+  }
+  
+  console.log('✅ Critical files verified');
   
   // Create public directory if it doesn't exist
   if (!existsSync(publicDir)) {
