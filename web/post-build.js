@@ -1,11 +1,11 @@
-import { existsSync, cpSync, readdirSync, statSync } from 'fs';
-import { join, resolve } from 'path';
+import { existsSync, cpSync, readdirSync, statSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, '..');
 
-function postBuild() {
+async function postBuild() {
   console.log('🔧 Running post-build steps...');
   
   const publicAssetsDir = resolve(__dirname, 'public/assets');
@@ -44,14 +44,48 @@ function postBuild() {
     });
     console.log('✅ Assets copied to dist/assets');
     
-    // Verify critical files
+    // Verify critical files with content check
     const ttsJsonPath = join(distAssetsDir, 'onnx', 'tts.json');
     if (existsSync(ttsJsonPath)) {
       const stats = statSync(ttsJsonPath);
       console.log(`   ✅ tts.json exists: ${stats.size} bytes`);
+      
       if (stats.size === 0) {
         console.error('   ❌ tts.json is empty!');
+        console.error('   Checking source file...');
+        const sourcePath = join(publicAssetsDir, 'onnx', 'tts.json');
+        if (existsSync(sourcePath)) {
+          const sourceStats = statSync(sourcePath);
+          console.error(`   Source file size: ${sourceStats.size} bytes`);
+          if (sourceStats.size > 0) {
+            console.error('   Source file has content but copy failed!');
+            // Try to read and write manually
+            try {
+              const content = readFileSync(sourcePath, 'utf8');
+              console.log(`   Source content length: ${content.length} chars`);
+              mkdirSync(dirname(ttsJsonPath), { recursive: true });
+              writeFileSync(ttsJsonPath, content, 'utf8');
+              console.log('   ✅ Manually wrote tts.json');
+            } catch (e) {
+              console.error('   ❌ Failed to manually write:', e.message);
+            }
+          }
+        }
         process.exit(1);
+      } else {
+        // Verify content is valid JSON
+        try {
+          const content = readFileSync(ttsJsonPath, 'utf8');
+          if (content.trim().length === 0) {
+            console.error('   ❌ tts.json content is empty after reading!');
+            process.exit(1);
+          }
+          JSON.parse(content);
+          console.log(`   ✅ tts.json is valid JSON (${content.length} chars)`);
+        } catch (e) {
+          console.error(`   ❌ tts.json is not valid: ${e.message}`);
+          process.exit(1);
+        }
       }
     } else {
       console.error('   ❌ tts.json does not exist in dist!');
@@ -77,5 +111,8 @@ function postBuild() {
   }
 }
 
-postBuild();
+postBuild().catch(error => {
+  console.error('❌ Fatal error in postBuild:', error);
+  process.exit(1);
+});
 
