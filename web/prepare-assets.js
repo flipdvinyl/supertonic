@@ -27,34 +27,66 @@ const REQUIRED_FILES = [
   'LICENSE'
 ];
 
-function downloadFile(url, filePath) {
+function downloadFile(url, filePath, maxRedirects = 5) {
   return new Promise((resolve, reject) => {
+    if (maxRedirects <= 0) {
+      reject(new Error('Too many redirects'));
+      return;
+    }
+    
     const dir = dirname(filePath);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
     
     const file = createWriteStream(filePath);
-    https.get(url, (response) => {
-      if (response.statusCode === 302 || response.statusCode === 301) {
-        // Follow redirect
-        https.get(response.headers.location, (redirectResponse) => {
-          redirectResponse.pipe(file);
+    
+    const makeRequest = (requestUrl) => {
+      https.get(requestUrl, (response) => {
+        // Handle redirects (301, 302, 307, 308)
+        if (response.statusCode === 301 || 
+            response.statusCode === 302 || 
+            response.statusCode === 307 || 
+            response.statusCode === 308) {
+          const location = response.headers.location;
+          if (!location) {
+            reject(new Error(`Redirect without location header: ${response.statusCode}`));
+            return;
+          }
+          
+          // Close the current file stream
+          file.close();
+          rmSync(filePath, { force: true });
+          
+          // Follow redirect (absolute or relative URL)
+          const redirectUrl = location.startsWith('http') 
+            ? location 
+            : new URL(location, requestUrl).href;
+          
+          console.log(`   Following redirect to: ${redirectUrl}`);
+          return downloadFile(redirectUrl, filePath, maxRedirects - 1)
+            .then(resolve)
+            .catch(reject);
+        } else if (response.statusCode === 200) {
+          response.pipe(file);
           file.on('finish', () => {
             file.close();
             resolve();
           });
-        }).on('error', reject);
-      } else if (response.statusCode === 200) {
-        response.pipe(file);
-        file.on('finish', () => {
+          file.on('error', reject);
+        } else {
           file.close();
-          resolve();
-        });
-      } else {
-        reject(new Error(`Failed to download: ${response.statusCode}`));
-      }
-    }).on('error', reject);
+          rmSync(filePath, { force: true });
+          reject(new Error(`Failed to download: ${response.statusCode} ${response.statusMessage || ''}`));
+        }
+      }).on('error', (err) => {
+        file.close();
+        rmSync(filePath, { force: true }).catch(() => {});
+        reject(err);
+      });
+    };
+    
+    makeRequest(url);
   });
 }
 
