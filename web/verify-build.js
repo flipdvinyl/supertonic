@@ -118,11 +118,41 @@ function verifyBuild() {
     }
   }
   
+  // Additional check: verify tts.json specifically
+  const ttsJsonPath = join(onnxDir, 'tts.json');
+  if (existsSync(ttsJsonPath)) {
+    const stats = statSync(ttsJsonPath);
+    const content = readFileSync(ttsJsonPath, 'utf8');
+    console.log(`\n   tts.json details:`);
+    console.log(`     - Size: ${stats.size} bytes`);
+    console.log(`     - Content length: ${content.length} chars`);
+    console.log(`     - Is empty: ${content.trim().length === 0}`);
+    
+    if (content.trim().length === 0) {
+      console.error('   ❌ tts.json is empty!');
+      hasErrors = true;
+    } else {
+      try {
+        const parsed = JSON.parse(content);
+        console.log(`     - Valid JSON: ✅`);
+        console.log(`     - Keys: ${Object.keys(parsed).join(', ')}`);
+      } catch (e) {
+        console.error(`   ❌ tts.json is not valid JSON: ${e.message}`);
+        hasErrors = true;
+      }
+    }
+  } else {
+    console.error('   ❌ tts.json does not exist!');
+    hasErrors = true;
+  }
+  
   if (hasErrors) {
     console.error('\n❌ Build verification failed! Some files are missing or invalid.');
+    console.error('   This will cause runtime errors. Please check the build logs above.');
     process.exit(1);
   } else {
     console.log('\n✅ Build verification passed! All files are present and valid.');
+    console.log('   The application should work correctly.');
   }
 }
 
