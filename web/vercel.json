@@ -2,7 +2,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "devCommand": "npm run dev",
-  "installCommand": "npm install && git lfs install || true",
+  "installCommand": "npm install",
   "framework": "vite",
   "rewrites": [
     {
@@ -20,9 +20,6 @@
         }
       ]
     }
-  ],
-  "env": {
-    "GIT_LFS_SKIP_SMUDGE": "0"
-  }
+  ]
 }
 
