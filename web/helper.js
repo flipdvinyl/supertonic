@@ -239,7 +239,19 @@ export async function loadVoiceStyle(voiceStylePaths, verbose = false) {
     
     // Read first file to get dimensions
     const firstResponse = await fetch(voiceStylePaths[0]);
-    const firstStyle = await firstResponse.json();
+    if (!firstResponse.ok) {
+        throw new Error(`Failed to load voice style: ${firstResponse.status} ${firstResponse.statusText} - ${voiceStylePaths[0]}`);
+    }
+    const firstText = await firstResponse.text();
+    if (!firstText || firstText.trim().length === 0) {
+        throw new Error(`Voice style file is empty: ${voiceStylePaths[0]}`);
+    }
+    let firstStyle;
+    try {
+        firstStyle = JSON.parse(firstText);
+    } catch (e) {
+        throw new Error(`Failed to parse voice style JSON: ${voiceStylePaths[0]} - ${e.message}`);
+    }
     
     const ttlDims = firstStyle.style_ttl.dims;
     const dpDims = firstStyle.style_dp.dims;
@@ -258,7 +270,19 @@ export async function loadVoiceStyle(voiceStylePaths, verbose = false) {
     // Fill in the data
     for (let i = 0; i < bsz; i++) {
         const response = await fetch(voiceStylePaths[i]);
-        const voiceStyle = await response.json();
+        if (!response.ok) {
+            throw new Error(`Failed to load voice style: ${response.status} ${response.statusText} - ${voiceStylePaths[i]}`);
+        }
+        const text = await response.text();
+        if (!text || text.trim().length === 0) {
+            throw new Error(`Voice style file is empty: ${voiceStylePaths[i]}`);
+        }
+        let voiceStyle;
+        try {
+            voiceStyle = JSON.parse(text);
+        } catch (e) {
+            throw new Error(`Failed to parse voice style JSON: ${voiceStylePaths[i]} - ${e.message}`);
+        }
         
         // Flatten TTL data
         const ttlData = voiceStyle.style_ttl.data.flat(Infinity);
@@ -289,8 +313,19 @@ export async function loadVoiceStyle(voiceStylePaths, verbose = false) {
  */
 export async function loadCfgs(onnxDir) {
     const response = await fetch(`${onnxDir}/tts.json`);
-    const cfgs = await response.json();
-    return cfgs;
+    if (!response.ok) {
+        throw new Error(`Failed to load config: ${response.status} ${response.statusText} - ${onnxDir}/tts.json`);
+    }
+    const text = await response.text();
+    if (!text || text.trim().length === 0) {
+        throw new Error(`Config file is empty: ${onnxDir}/tts.json`);
+    }
+    try {
+        const cfgs = JSON.parse(text);
+        return cfgs;
+    } catch (e) {
+        throw new Error(`Failed to parse config JSON: ${onnxDir}/tts.json - ${e.message}`);
+    }
 }
 
 /**
@@ -298,7 +333,19 @@ export async function loadCfgs(onnxDir) {
  */
 export async function loadTextProcessor(onnxDir) {
     const response = await fetch(`${onnxDir}/unicode_indexer.json`);
-    const indexer = await response.json();
+    if (!response.ok) {
+        throw new Error(`Failed to load text processor: ${response.status} ${response.statusText} - ${onnxDir}/unicode_indexer.json`);
+    }
+    const text = await response.text();
+    if (!text || text.trim().length === 0) {
+        throw new Error(`Text processor file is empty: ${onnxDir}/unicode_indexer.json`);
+    }
+    let indexer;
+    try {
+        indexer = JSON.parse(text);
+    } catch (e) {
+        throw new Error(`Failed to parse text processor JSON: ${onnxDir}/unicode_indexer.json - ${e.message}`);
+    }
     return new UnicodeProcessor(indexer);
 }
 

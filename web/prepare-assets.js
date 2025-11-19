@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, cpSync, lstatSync, unlinkSync, rmSync, readdirSync, statSync, createWriteStream } from 'fs';
+import { existsSync, mkdirSync, cpSync, lstatSync, unlinkSync, rmSync, readdirSync, statSync, createWriteStream, readFileSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import https from 'https';
@@ -77,13 +77,28 @@ async function downloadAssets(assetsDir) {
       console.log(`   Downloading: ${file}...`);
       await downloadFile(url, filePath);
       
-      // Verify file size (ONNX files should be large)
+      // Verify file size
       const stats = statSync(filePath);
+      const sizeMB = stats.size / 1024 / 1024;
+      
       if (file.endsWith('.onnx') && stats.size < 1000) {
         console.warn(`   ⚠️  Warning: ${file} seems too small (${stats.size} bytes), might be a pointer file`);
         failCount++;
+      } else if (file.endsWith('.json') && stats.size < 10) {
+        console.warn(`   ⚠️  Warning: ${file} seems too small (${stats.size} bytes), might be empty or corrupted`);
+        // Try to parse JSON to verify
+        try {
+          const content = readFileSync(filePath, 'utf8');
+          JSON.parse(content);
+          console.log(`   ✅ Downloaded: ${file} (${stats.size} bytes, valid JSON)`);
+          successCount++;
+        } catch (e) {
+          console.error(`   ❌ ${file} is not valid JSON: ${e.message}`);
+          failCount++;
+        }
       } else {
-        console.log(`   ✅ Downloaded: ${file} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+        const sizeStr = sizeMB > 1 ? `${sizeMB.toFixed(2)} MB` : `${(stats.size / 1024).toFixed(2)} KB`;
+        console.log(`   ✅ Downloaded: ${file} (${sizeStr})`);
         successCount++;
       }
     } catch (error) {
