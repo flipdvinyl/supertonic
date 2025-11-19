@@ -1,73 +1,147 @@
-import { existsSync, mkdirSync, symlinkSync, cpSync, lstatSync, unlinkSync, rmSync, readdirSync } from 'fs';
-import { join, resolve } from 'path';
+import { existsSync, mkdirSync, cpSync, lstatSync, unlinkSync, rmSync, readdirSync, statSync, createWriteStream } from 'fs';
+import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
+import https from 'https';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, '..');
 
-function downloadAssets(assetsDir) {
-  console.log('📥 Downloading assets from Hugging Face...');
-  console.log(`   Target directory: ${assetsDir}`);
-  
-  // Check if git is available
-  try {
-    execSync('git --version', { stdio: 'pipe' });
-  } catch (e) {
-    console.error('❌ Git is not available');
-    return false;
-  }
-  
-  // Check if git-lfs is available (optional but recommended)
-  let hasGitLFS = false;
-  try {
-    execSync('git lfs version', { stdio: 'pipe' });
-    hasGitLFS = true;
-    console.log('   Git LFS is available');
-  } catch (e) {
-    console.warn('   ⚠️  Git LFS not found, but continuing anyway...');
-  }
-  
-  try {
-    // Clone with depth 1 to speed up
-    execSync(`git clone --depth 1 https://huggingface.co/Supertone/supertonic ${assetsDir}`, {
-      stdio: 'inherit',
-      cwd: resolve(__dirname, '..'),
-      env: { ...process.env, GIT_LFS_SKIP_SMUDGE: '0' }
-    });
-    
-    // If Git LFS is available, pull LFS files
-    if (hasGitLFS) {
-      console.log('   Pulling Git LFS files...');
-      try {
-        execSync('git lfs pull', {
-          stdio: 'inherit',
-          cwd: assetsDir
-        });
-      } catch (e) {
-        console.warn('   ⚠️  Git LFS pull failed, but continuing...');
-      }
+const HF_REPO = 'Supertone/supertonic';
+const HF_BASE_URL = `https://huggingface.co/${HF_REPO}/resolve/main`;
+
+// Files we need to download
+const REQUIRED_FILES = [
+  'onnx/duration_predictor.onnx',
+  'onnx/text_encoder.onnx',
+  'onnx/vector_estimator.onnx',
+  'onnx/vocoder.onnx',
+  'onnx/tts.json',
+  'onnx/tts.yml',
+  'onnx/unicode_indexer.json',
+  'voice_styles/M1.json',
+  'voice_styles/M2.json',
+  'voice_styles/F1.json',
+  'voice_styles/F2.json',
+  'config.json',
+  'README.md',
+  'LICENSE'
+];
+
+function downloadFile(url, filePath) {
+  return new Promise((resolve, reject) => {
+    const dir = dirname(filePath);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
     }
     
-    console.log('✅ Assets downloaded successfully');
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to download assets:', error.message);
-    console.warn('   This might be due to network issues or Git LFS not being available');
-    return false;
-  }
+    const file = createWriteStream(filePath);
+    https.get(url, (response) => {
+      if (response.statusCode === 302 || response.statusCode === 301) {
+        // Follow redirect
+        https.get(response.headers.location, (redirectResponse) => {
+          redirectResponse.pipe(file);
+          file.on('finish', () => {
+            file.close();
+            resolve();
+          });
+        }).on('error', reject);
+      } else if (response.statusCode === 200) {
+        response.pipe(file);
+        file.on('finish', () => {
+          file.close();
+          resolve();
+        });
+      } else {
+        reject(new Error(`Failed to download: ${response.statusCode}`));
+      }
+    }).on('error', reject);
+  });
 }
 
-function prepareAssets() {
+async function downloadAssets(assetsDir) {
+  console.log('📥 Downloading assets from Hugging Face (direct download)...');
+  console.log(`   Target directory: ${assetsDir}`);
+  
+  if (!existsSync(assetsDir)) {
+    mkdirSync(assetsDir, { recursive: true });
+  }
+  
+  let successCount = 0;
+  let failCount = 0;
+  
+  for (const file of REQUIRED_FILES) {
+    const url = `${HF_BASE_URL}/${file}`;
+    const filePath = join(assetsDir, file);
+    
+    try {
+      console.log(`   Downloading: ${file}...`);
+      await downloadFile(url, filePath);
+      
+      // Verify file size (ONNX files should be large)
+      const stats = statSync(filePath);
+      if (file.endsWith('.onnx') && stats.size < 1000) {
+        console.warn(`   ⚠️  Warning: ${file} seems too small (${stats.size} bytes), might be a pointer file`);
+        failCount++;
+      } else {
+        console.log(`   ✅ Downloaded: ${file} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+        successCount++;
+      }
+    } catch (error) {
+      console.error(`   ❌ Failed to download ${file}:`, error.message);
+      failCount++;
+    }
+  }
+  
+  console.log(`\n   Summary: ${successCount} succeeded, ${failCount} failed`);
+  
+  if (failCount > 0) {
+    console.warn('   ⚠️  Some files failed to download. The app may not work correctly.');
+    return false;
+  }
+  
+  console.log('✅ All assets downloaded successfully');
+  return true;
+}
+
+async function prepareAssets() {
   const assetsDir = resolve(__dirname, '../assets');
   const publicDir = resolve(__dirname, 'public');
   
   if (!existsSync(assetsDir)) {
     console.warn('⚠️  Assets directory not found.');
     // Try to download automatically
-    if (!downloadAssets(assetsDir)) {
-      console.warn('   Manual download: git clone https://huggingface.co/Supertone/supertonic assets');
+    const downloaded = await downloadAssets(assetsDir);
+    if (!downloaded) {
+      console.warn('   Failed to download assets. The build may fail.');
       return;
+    }
+  } else {
+    // Check if assets are valid (not just pointer files)
+    const onnxDir = join(assetsDir, 'onnx');
+    if (existsSync(onnxDir)) {
+      const files = readdirSync(onnxDir);
+      const onnxFiles = files.filter(f => f.endsWith('.onnx'));
+      let needsRedownload = false;
+      
+      for (const file of onnxFiles) {
+        const filePath = join(onnxDir, file);
+        const stats = statSync(filePath);
+        if (stats.size < 1000) {
+          console.warn(`   ⚠️  ${file} appears to be a pointer file, re-downloading...`);
+          needsRedownload = true;
+          break;
+        }
+      }
+      
+      if (needsRedownload) {
+        console.log('   Re-downloading assets...');
+        rmSync(assetsDir, { recursive: true, force: true });
+        const downloaded = await downloadAssets(assetsDir);
+        if (!downloaded) {
+          console.warn('   Failed to re-download assets.');
+          return;
+        }
+      }
     }
   }
   
@@ -109,14 +183,31 @@ function prepareAssets() {
     });
     console.log('✅ Copied assets to public/assets');
     
-    // Verify that onnx files exist
+    // Verify that onnx files exist and have proper size
     const onnxDir = join(assetsLink, 'onnx');
     if (existsSync(onnxDir)) {
       const files = readdirSync(onnxDir);
       const onnxFiles = files.filter(f => f.endsWith('.onnx'));
       console.log(`   Found ${onnxFiles.length} ONNX model files`);
+      
+      let allValid = true;
+      for (const file of onnxFiles) {
+        const filePath = join(onnxDir, file);
+        const stats = statSync(filePath);
+        const sizeMB = stats.size / 1024 / 1024;
+        console.log(`     - ${file}: ${sizeMB.toFixed(2)} MB`);
+        
+        if (stats.size < 1000) {
+          console.warn(`     ⚠️  ${file} is too small, might be corrupted or a pointer file`);
+          allValid = false;
+        }
+      }
+      
       if (onnxFiles.length === 0) {
         console.warn('   ⚠️  Warning: No ONNX files found! Models may not work.');
+        allValid = false;
+      } else if (!allValid) {
+        console.warn('   ⚠️  Warning: Some ONNX files appear to be invalid!');
       }
     } else {
       console.warn('   ⚠️  Warning: onnx directory not found!');
@@ -127,5 +218,8 @@ function prepareAssets() {
   }
 }
 
-prepareAssets();
+prepareAssets().catch(error => {
+  console.error('❌ Fatal error in prepareAssets:', error);
+  process.exit(1);
+});
 
