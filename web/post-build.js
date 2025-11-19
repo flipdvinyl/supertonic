@@ -33,7 +33,34 @@ async function postBuild() {
   
   // Copy assets from public to dist
   console.log('📦 Copying assets from public/assets to dist/assets...');
+  
+  // First, verify source files exist and have content
+  const sourceTtsJson = join(publicAssetsDir, 'onnx', 'tts.json');
+  if (existsSync(sourceTtsJson)) {
+    const sourceStats = statSync(sourceTtsJson);
+    const sourceContent = readFileSync(sourceTtsJson, 'utf8');
+    console.log(`   Source tts.json: ${sourceStats.size} bytes, ${sourceContent.length} chars`);
+    if (sourceStats.size === 0 || sourceContent.trim().length === 0) {
+      console.error('   ❌ Source tts.json is empty! Cannot proceed.');
+      process.exit(1);
+    }
+  } else {
+    console.error('   ❌ Source tts.json does not exist!');
+    process.exit(1);
+  }
+  
   try {
+    // Remove dist/assets if it exists to ensure clean copy
+    if (existsSync(distAssetsDir)) {
+      const { rmSync } = await import('fs');
+      rmSync(distAssetsDir, { recursive: true, force: true });
+      console.log('   Removed existing dist/assets');
+    }
+    
+    // Create dist/assets directory
+    mkdirSync(distAssetsDir, { recursive: true });
+    
+    // Copy directory structure and files
     cpSync(publicAssetsDir, distAssetsDir, {
       recursive: true,
       force: true,
@@ -43,6 +70,35 @@ async function postBuild() {
       }
     });
     console.log('✅ Assets copied to dist/assets');
+    
+    // Immediately verify the copy worked
+    const copiedTtsJson = join(distAssetsDir, 'onnx', 'tts.json');
+    if (existsSync(copiedTtsJson)) {
+      const copiedStats = statSync(copiedTtsJson);
+      const copiedContent = readFileSync(copiedTtsJson, 'utf8');
+      console.log(`   Copied tts.json: ${copiedStats.size} bytes, ${copiedContent.length} chars`);
+      
+      if (copiedStats.size === 0 || copiedContent.trim().length === 0) {
+        console.error('   ❌ Copied tts.json is empty! Attempting manual copy...');
+        // Manual copy
+        const sourceContent = readFileSync(sourceTtsJson, 'utf8');
+        mkdirSync(dirname(copiedTtsJson), { recursive: true });
+        writeFileSync(copiedTtsJson, sourceContent, 'utf8');
+        console.log('   ✅ Manually copied tts.json');
+        
+        // Verify again
+        const verifyStats = statSync(copiedTtsJson);
+        const verifyContent = readFileSync(copiedTtsJson, 'utf8');
+        if (verifyStats.size === 0 || verifyContent.trim().length === 0) {
+          console.error('   ❌ Manual copy also failed!');
+          process.exit(1);
+        }
+        console.log(`   ✅ Verified: ${verifyStats.size} bytes, ${verifyContent.length} chars`);
+      }
+    } else {
+      console.error('   ❌ tts.json was not copied!');
+      process.exit(1);
+    }
     
     // Verify critical files with content check
     const ttsJsonPath = join(distAssetsDir, 'onnx', 'tts.json');
