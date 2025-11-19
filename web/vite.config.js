@@ -10,5 +10,8 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['onnxruntime-web']
-  }
+  },
+  base: '/',
+  // Assets will be copied to public/assets by the prepare script
+  publicDir: 'public'
 });

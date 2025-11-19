@@ -4,8 +4,9 @@
   "description": "TTS inference using ONNX Runtime for Web Browser",
   "type": "module",
   "scripts": {
+    "prepare": "node prepare-assets.js",
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run prepare && vite build",
     "preview": "vite preview"
   },
   "keywords": ["tts", "onnx", "speech-synthesis", "web"],
