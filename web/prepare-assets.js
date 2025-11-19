@@ -255,6 +255,38 @@ async function prepareAssets() {
     });
     console.log('✅ Copied assets to public/assets');
     
+    // Verify that critical files were copied correctly
+    console.log('🔍 Verifying copied files...');
+    const verifyFiles = [
+      join(assetsLink, 'onnx', 'tts.json'),
+      join(assetsLink, 'onnx', 'text_encoder.onnx'),
+      join(assetsLink, 'voice_styles', 'M1.json')
+    ];
+    
+    let allValid = true;
+    for (const file of verifyFiles) {
+      if (!existsSync(file)) {
+        console.error(`   ❌ Missing in public: ${file}`);
+        allValid = false;
+      } else {
+        const stats = statSync(file);
+        if (stats.size === 0) {
+          console.error(`   ❌ Empty file in public: ${file}`);
+          allValid = false;
+        } else {
+          const sizeStr = stats.size > 1024 * 1024 
+            ? `${(stats.size / 1024 / 1024).toFixed(2)} MB`
+            : `${(stats.size / 1024).toFixed(2)} KB`;
+          console.log(`   ✅ ${file.split('/').pop()}: ${sizeStr}`);
+        }
+      }
+    }
+    
+    if (!allValid) {
+      console.error('❌ File copy verification failed!');
+      process.exit(1);
+    }
+    
     // Verify that onnx files exist and have proper size
     const onnxDir = join(assetsLink, 'onnx');
     if (existsSync(onnxDir)) {
@@ -262,7 +294,6 @@ async function prepareAssets() {
       const onnxFiles = files.filter(f => f.endsWith('.onnx'));
       console.log(`   Found ${onnxFiles.length} ONNX model files`);
       
-      let allValid = true;
       for (const file of onnxFiles) {
         const filePath = join(onnxDir, file);
         const stats = statSync(filePath);
@@ -278,12 +309,18 @@ async function prepareAssets() {
       if (onnxFiles.length === 0) {
         console.warn('   ⚠️  Warning: No ONNX files found! Models may not work.');
         allValid = false;
-      } else if (!allValid) {
-        console.warn('   ⚠️  Warning: Some ONNX files appear to be invalid!');
       }
     } else {
       console.warn('   ⚠️  Warning: onnx directory not found!');
+      allValid = false;
     }
+    
+    if (!allValid) {
+      console.error('❌ Assets verification failed!');
+      process.exit(1);
+    }
+    
+    console.log('✅ All assets verified and ready for build');
   } catch (e) {
     console.error('❌ Failed to copy assets:', e.message);
     throw e;
